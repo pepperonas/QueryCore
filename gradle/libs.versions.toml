@@ -1,0 +1,38 @@
+[versions]
+agp = "8.3.0"
+navigation-safe-args = "2.7.7"
+junit = "4.13.2"
+junitVersion = "1.2.1"
+espressoCore = "3.6.1"
+appcompat = "1.7.0"
+material = "1.12.0"
+activity = "1.8.2" # Downgraded from 1.10.1 to be compatible with API 34
+constraintlayout = "2.2.1"
+room = "2.6.1"
+lifecycle = "2.7.0"
+navigation-fragment = "2.7.7"
+navigation-ui = "2.7.7"
+mysql-connector = "8.0.33"
+mongodb-driver = "3.12.14"
+
+[libraries]
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
+espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
+appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+activity = { group = "androidx.activity", name = "activity", version.ref = "activity" }
+constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+lifecycle-viewmodel = { group = "androidx.lifecycle", name = "lifecycle-viewmodel", version.ref = "lifecycle" }
+lifecycle-livedata = { group = "androidx.lifecycle", name = "lifecycle-livedata", version.ref = "lifecycle" }
+navigation-fragment = { group = "androidx.navigation", name = "navigation-fragment", version.ref = "navigation-fragment" }
+navigation-ui = { group = "androidx.navigation", name = "navigation-ui", version.ref = "navigation-ui" }
+mysql-connector = { group = "mysql", name = "mysql-connector-java", version.ref = "mysql-connector" }
+mongodb-driver = { group = "org.mongodb", name = "mongodb-driver", version.ref = "mongodb-driver" }
+navigation-safeargs-plugin = { group = "androidx.navigation", name = "navigation-safe-args-gradle-plugin", version.ref = "navigation-safe-args" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+navigation-safeargs = { id = "androidx.navigation.safeargs", version.ref = "navigation-safe-args" }

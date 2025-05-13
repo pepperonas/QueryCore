@@ -1,0 +1,155 @@
+plugins {
+    alias(libs.plugins.android.application)
+    id 'androidx.navigation.safeargs'
+}
+
+repositories {
+    google()
+    mavenCentral()
+    // Add JCenter as a fallback repository
+    jcenter()
+    // Add repository for MariaDB Connector
+    maven { url "https://downloads.mariadb.com/Connectors/java/connector-java-2.7.0" }
+}
+
+android {
+    namespace 'io.celox.querycore'
+    
+    // Add Java namespace for navigation classes
+    sourceSets {
+        main {
+            java.srcDirs += 'build/generated/source/navigation-args'
+        }
+    }
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "io.celox.querycore"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+        
+        // Enable multidex to handle large number of methods from MongoDB
+        multiDexEnabled true
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        
+        // Enable Room export schema
+        javaCompileOptions {
+            annotationProcessorOptions {
+                arguments += [
+                    "room.schemaLocation": "$projectDir/schemas",
+                    "room.incremental": "true",
+                    "room.expandProjection": "true"
+                ]
+            }
+        }
+        
+        // Enable buildFeatures
+        buildFeatures {
+            buildConfig = true
+            viewBinding = true
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    
+    // Exclude conflicting dependencies
+    packagingOptions {
+        resources {
+            excludes += [
+                'META-INF/DEPENDENCIES',
+                'META-INF/LICENSE',
+                'META-INF/LICENSE.txt',
+                'META-INF/license.txt',
+                'META-INF/NOTICE',
+                'META-INF/NOTICE.txt',
+                'META-INF/notice.txt',
+                'META-INF/ASL2.0',
+                'META-INF/INDEX.LIST',
+                'META-INF/jersey-module-version',
+                'META-INF/MANIFEST.MF',
+                'META-INF/services/javax.annotation.processing.Processor',
+                'META-INF/maven/**',
+                'META-INF/LICENSE.md',
+                'META-INF/NOTICE.md',
+                'META-INF/README.md',
+                'about.html',
+                'plugin.properties'
+            ]
+            pickFirsts += [
+                'META-INF/services/javax.security.auth.spi.LoginModule',
+                'META-INF/services/javax.security.sasl.SaslClientFactory',
+                'META-INF/services/javax.security.sasl.SaslServerFactory',
+                'OSGI-INF/bundle.info',
+                'OSGI-INF/**'
+            ]
+        }
+    }
+    
+    // Disable AAPT resources processing
+    aaptOptions {
+        noCompress "tflite"
+    }
+}
+
+dependencies {
+    // MongoDB driver with Android compatibility 
+    implementation 'org.mongodb:mongo-java-driver:3.12.14'  // Legacy driver for compatibility
+    
+    // We're not using the JDBC driver anymore - will handle MongoDB connections directly
+    // instead of using 'org.mongodb:mongodb-jdbc:2.2.2' which has conflicts
+    
+    // Simple HTTP client for Android
+    implementation 'org.apache.httpcomponents:httpclient-android:4.3.5.1'
+    
+    // Use a more focused set of dependencies for SASL support
+    implementation 'org.apache.directory.server:apacheds-kerberos-codec:2.0.0-M24'
+    implementation 'org.apache.directory.server:apacheds-protocol-ldap:2.0.0-M24'
+
+    // MariaDB connector with Android compatibility
+    // Using 2.4.4 version that doesn't require java.sql.DriverAction
+    implementation 'org.mariadb.jdbc:mariadb-java-client:2.4.4'
+    
+    // Add compatibility for earlier Android versions
+    implementation 'org.apache.commons:commons-lang3:3.12.0'
+    
+    // Android dependencies
+    implementation libs.appcompat
+    implementation libs.material
+    implementation libs.activity
+    implementation libs.constraintlayout
+
+    // Navigation components
+    implementation libs.navigation.fragment
+    implementation libs.navigation.ui
+
+    // Room database
+    implementation libs.room.runtime
+    annotationProcessor libs.room.compiler  // Must not disable annotation processing for Room
+
+    // Lifecycle components
+    implementation libs.lifecycle.viewmodel
+    implementation libs.lifecycle.livedata
+
+    // Multidex support
+    implementation 'androidx.multidex:multidex:2.0.1'
+    
+    // For JSON handling
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    // Testing
+    testImplementation libs.junit
+    androidTestImplementation libs.ext.junit
+    androidTestImplementation libs.espresso.core
+}

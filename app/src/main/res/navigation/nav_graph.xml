@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/connectionsFragment">
+
+    <fragment
+        android:id="@+id/connectionsFragment"
+        android:name="io.celox.querycore.ui.ConnectionsFragment"
+        android:label="@string/nav_connections"
+        tools:layout="@layout/fragment_connections">
+        <action
+            android:id="@+id/action_connectionsFragment_to_addEditConnectionFragment"
+            app:destination="@id/addEditConnectionFragment" />
+        <action
+            android:id="@+id/action_connectionsFragment_to_databaseBrowserFragment"
+            app:destination="@id/databaseBrowserFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/addEditConnectionFragment"
+        android:name="io.celox.querycore.ui.AddEditConnectionFragment"
+        android:label="@string/add_connection"
+        tools:layout="@layout/fragment_add_edit_connection">
+        <argument
+            android:name="connectionId"
+            android:defaultValue="-1"
+            app:argType="integer" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/databaseBrowserFragment"
+        android:name="io.celox.querycore.ui.DatabaseBrowserFragment"
+        android:label="@string/nav_databases"
+        tools:layout="@layout/fragment_database_browser">
+        <argument
+            android:name="connectionId"
+            app:argType="integer" />
+        <action
+            android:id="@+id/action_databaseBrowserFragment_to_tableViewFragment"
+            app:destination="@id/tableViewFragment" />
+        <action
+            android:id="@+id/action_databaseBrowserFragment_to_queryFragment"
+            app:destination="@id/queryFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/tableViewFragment"
+        android:name="io.celox.querycore.ui.TableViewFragment"
+        android:label="@string/nav_tables"
+        tools:layout="@layout/fragment_table_view">
+        <argument
+            android:name="databaseName"
+            app:argType="string" />
+        <argument
+            android:name="tableName"
+            app:argType="string" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/queryFragment"
+        android:name="io.celox.querycore.ui.QueryFragment"
+        android:label="@string/nav_query"
+        tools:layout="@layout/fragment_query">
+        <argument
+            android:name="databaseName"
+            app:argType="string" />
+        <action
+            android:id="@+id/action_queryFragment_to_queryResultsFragment"
+            app:destination="@id/queryResultsFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/queryResultsFragment"
+        android:name="io.celox.querycore.ui.QueryResultsFragment"
+        android:label="@string/nav_results"
+        tools:layout="@layout/fragment_query_results">
+        <argument
+            android:name="query"
+            app:argType="string" />
+    </fragment>
+</navigation>
