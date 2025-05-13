@@ -106,7 +106,38 @@ public class ConnectionInfo implements Serializable {
                 return String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true", 
                                     host, port, database);
             case MONGODB:
-                return String.format("mongodb://%s:%d/%s", host, port, database);
+                StringBuilder url = new StringBuilder("mongodb://");
+                
+                // Add credentials if available
+                if (username != null && !username.isEmpty() && 
+                    password != null && !password.isEmpty()) {
+                    
+                    // URL encode the password to handle special characters
+                    String encodedPassword;
+                    try {
+                        encodedPassword = java.net.URLEncoder.encode(
+                            password, "UTF-8")
+                            .replace("+", "%20");  // Replace space encoding + with %20
+                    } catch (Exception e) {
+                        // If encoding fails, use the raw password (may still have issues)
+                        encodedPassword = password;
+                    }
+                    
+                    url.append(username)
+                       .append(":")
+                       .append(encodedPassword)
+                       .append("@");
+                }
+                
+                // Add host:port/database with admin as auth source
+                url.append(host)
+                   .append(":")
+                   .append(port)
+                   .append("/")
+                   .append(database)
+                   .append("?authSource=admin");
+                
+                return url.toString();
             default:
                 return "";
         }

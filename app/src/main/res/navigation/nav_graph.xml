@@ -16,6 +16,9 @@
         <action
             android:id="@+id/action_connectionsFragment_to_databaseBrowserFragment"
             app:destination="@id/databaseBrowserFragment" />
+        <action
+            android:id="@+id/action_connectionsFragment_to_mySqlTestFragment"
+            app:destination="@id/mySqlTestFragment" />
     </fragment>
 
     <fragment
@@ -80,4 +83,10 @@
             android:name="query"
             app:argType="string" />
     </fragment>
+    
+    <fragment
+        android:id="@+id/mySqlTestFragment"
+        android:name="io.celox.querycore.ui.MySqlTestFragment"
+        android:label="MySQL Connection Test"
+        tools:layout="@layout/fragment_mysql_test" />
 </navigation>

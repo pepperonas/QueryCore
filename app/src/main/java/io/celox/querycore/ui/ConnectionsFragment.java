@@ -44,6 +44,7 @@ public class ConnectionsFragment extends Fragment implements ConnectionAdapter.O
         recyclerView = view.findViewById(R.id.recycler_view_connections);
         emptyView = view.findViewById(R.id.text_view_empty);
         FloatingActionButton fabAddConnection = view.findViewById(R.id.fab_add_connection);
+        Button mysqlTestButton = view.findViewById(R.id.button_mysql_test);
         
         // Setup RecyclerView
         recyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
@@ -54,6 +55,13 @@ public class ConnectionsFragment extends Fragment implements ConnectionAdapter.O
         fabAddConnection.setOnClickListener(v -> 
                 Navigation.findNavController(v).navigate(
                         R.id.action_connectionsFragment_to_addEditConnectionFragment
+                )
+        );
+        
+        // Set click listener for MySQL test button
+        mysqlTestButton.setOnClickListener(v -> 
+                Navigation.findNavController(v).navigate(
+                        R.id.action_connectionsFragment_to_mySqlTestFragment
                 )
         );
         

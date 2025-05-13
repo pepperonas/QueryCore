@@ -15,7 +15,9 @@ import java.util.concurrent.Executors;
 import io.celox.querycore.database.DatabaseService;
 import io.celox.querycore.database.MongoDbDatabaseService;
 import io.celox.querycore.database.MySqlDatabaseService;
+import io.celox.querycore.database.MySqlNativeDatabaseService;
 import io.celox.querycore.models.ConnectionInfo;
+import io.celox.querycore.utils.DatabaseTestUtils;
 
 public class DatabaseViewModel extends ViewModel {
     
@@ -29,6 +31,7 @@ public class DatabaseViewModel extends ViewModel {
     private MutableLiveData<List<String>> tables = new MutableLiveData<>();
     private MutableLiveData<List<Map<String, Object>>> queryResults = new MutableLiveData<>();
     private MutableLiveData<Map<String, String>> tableStructure = new MutableLiveData<>();
+    private MutableLiveData<String> diagnosticInfo = new MutableLiveData<>();
     
     public DatabaseViewModel() {
         // Ensure we have enough threads for database operations
@@ -46,8 +49,12 @@ public class DatabaseViewModel extends ViewModel {
                 // Create appropriate database service
                 switch (connectionInfo.getType()) {
                     case MYSQL:
+                        databaseService = new MySqlNativeDatabaseService();
+                        Log.d("DatabaseViewModel", "Using MySQL native driver");
+                        break;
                     case MARIADB:
-                        databaseService = new MySqlDatabaseService();
+                        databaseService = new MySqlDatabaseService(); // Using MariaDB driver
+                        Log.d("DatabaseViewModel", "Using MariaDB driver");
                         break;
                     case MONGODB:
                         databaseService = new MongoDbDatabaseService();
@@ -215,6 +222,78 @@ public class DatabaseViewModel extends ViewModel {
         });
     }
     
+    /**
+     * Run a diagnostic operation to test MongoDB connection capabilities
+     * This can help determine if there are permission issues or if the database is empty
+     */
+    public void runMongoDbDiagnostics() {
+        executorService.execute(() -> {
+            try {
+                ConnectionInfo info = currentConnection.getValue();
+                if (info == null) {
+                    diagnosticInfo.postValue("No active connection. Please connect first.");
+                    return;
+                }
+                
+                Log.i("DatabaseViewModel", "Running MongoDB diagnostics for " + info.getHost());
+                diagnosticInfo.postValue("Running MongoDB diagnostics for " + info.getHost() + "...");
+                
+                String results = DatabaseTestUtils.getMongoDbServerInfo(
+                        info.getHost(), 
+                        info.getPort(), 
+                        info.getDatabase(), 
+                        info.getUsername(), 
+                        info.getPassword());
+                
+                diagnosticInfo.postValue(results);
+                Log.i("DatabaseViewModel", "MongoDB diagnostics complete");
+                
+            } catch (Exception e) {
+                String errorMsg = "Diagnostics failed: " + e.getMessage();
+                Log.e("DatabaseViewModel", errorMsg, e);
+                diagnosticInfo.postValue(errorMsg);
+            }
+        });
+    }
+    
+    /**
+     * Attempt to create a test collection in the MongoDB database
+     * This is useful for verifying if the user has write permissions
+     */
+    public void createMongoDbTestCollection() {
+        executorService.execute(() -> {
+            try {
+                ConnectionInfo info = currentConnection.getValue();
+                if (info == null) {
+                    diagnosticInfo.postValue("No active connection. Please connect first.");
+                    return;
+                }
+                
+                Log.i("DatabaseViewModel", "Creating test collection in " + info.getDatabase());
+                diagnosticInfo.postValue("Creating test collection in database " + info.getDatabase() + "...");
+                
+                String result = DatabaseTestUtils.createMongoDbTestCollection(
+                        info.getHost(), 
+                        info.getPort(), 
+                        info.getDatabase(), 
+                        info.getUsername(), 
+                        info.getPassword());
+                
+                diagnosticInfo.postValue(result);
+                
+                // Refresh table list to show new collection
+                if (result.contains("Successfully created")) {
+                    loadTables(info.getDatabase());
+                }
+                
+            } catch (Exception e) {
+                String errorMsg = "Failed to create test collection: " + e.getMessage();
+                Log.e("DatabaseViewModel", errorMsg, e);
+                diagnosticInfo.postValue(errorMsg);
+            }
+        });
+    }
+    
     // LiveData getters
     public LiveData<ConnectionInfo> getCurrentConnection() {
         return currentConnection;
@@ -242,6 +321,10 @@ public class DatabaseViewModel extends ViewModel {
     
     public LiveData<Map<String, String>> getTableStructure() {
         return tableStructure;
+    }
+    
+    public LiveData<String> getDiagnosticInfo() {
+        return diagnosticInfo;
     }
     
     /**

@@ -241,13 +241,31 @@ public class MongoDbDatabaseService implements DatabaseService {
                     Log.d(TAG, "Auth Database: " + connectionInfo.getDatabase());
                     Log.d(TAG, "Has Password: " + (connectionInfo.getPassword() != null && !connectionInfo.getPassword().isEmpty()));
                     
+                    // Set authentication database to admin by default
+                    String authDb = "admin";
+                    Log.d(TAG, "Using admin database for authentication instead of: " + connectionInfo.getDatabase());
+                    
+                    // URL encode the password to handle special characters
+                    String encodedPassword;
+                    try {
+                        encodedPassword = java.net.URLEncoder.encode(
+                            connectionInfo.getPassword(), "UTF-8")
+                            .replace("+", "%20");  // Replace space encoding + with %20
+                        
+                        Log.d(TAG, "Password contains special characters, using URL encoding");
+                    } catch (Exception e) {
+                        // If encoding fails, use the raw password (may still have issues)
+                        encodedPassword = connectionInfo.getPassword();
+                        Log.e(TAG, "Failed to URL encode password, using raw password");
+                    }
+                    
                     try {
                         Log.d(TAG, "Attempting SCRAM-SHA-256 authentication (MongoDB 4.0+)");
                         // First try SCRAM-SHA-256 (more secure, MongoDB 4.0+)
                         credential = MongoCredential.createScramSha256Credential(
                                 connectionInfo.getUsername(),
-                                connectionInfo.getDatabase(),
-                                connectionInfo.getPassword().toCharArray()
+                                authDb,
+                                encodedPassword.toCharArray()
                         );
                         Log.i(TAG, "Successfully created SCRAM-SHA-256 credential object");
                     } catch (Throwable e) {
@@ -258,8 +276,8 @@ public class MongoDbDatabaseService implements DatabaseService {
                         try {
                             credential = MongoCredential.createScramSha1Credential(
                                     connectionInfo.getUsername(),
-                                    connectionInfo.getDatabase(),
-                                    connectionInfo.getPassword().toCharArray()
+                                    authDb,
+                                    encodedPassword.toCharArray()
                             );
                             Log.i(TAG, "Successfully created SCRAM-SHA-1 credential object");
                         } catch (Exception e2) {
@@ -269,12 +287,16 @@ public class MongoDbDatabaseService implements DatabaseService {
                             // Last resort: plain credential
                             credential = MongoCredential.createCredential(
                                     connectionInfo.getUsername(),
-                                    connectionInfo.getDatabase(),
-                                    connectionInfo.getPassword().toCharArray()
+                                    authDb,
+                                    encodedPassword.toCharArray()
                             );
                             Log.i(TAG, "Using plain credential as last resort");
                         }
                     }
+                    
+                    // Explicitly disable SASL authentication mechanism which requires SASL
+                    System.setProperty("org.mongodb.driver.disableSaslAuthentication", "true");
+                    Log.d(TAG, "Disabled SASL authentication, using legacy MONGODB-CR");
                     
                     // Create client with credentials
                     this.mongoClient = new MongoClient(serverAddress, Arrays.asList(credential), options);
@@ -341,40 +363,79 @@ public class MongoDbDatabaseService implements DatabaseService {
                 try {
                     Log.d(TAG, "Attempting direct connection string as fallback");
                     
-                    // Build connection string manually
-                    StringBuilder connString = new StringBuilder("mongodb://");
+                    // Build connection string manually with special authentication mechanism
                     
-                    // Add credentials if available
-                    if (connectionInfo.getUsername() != null && !connectionInfo.getUsername().isEmpty() &&
-                            connectionInfo.getPassword() != null && !connectionInfo.getPassword().isEmpty()) {
-                        connString.append(connectionInfo.getUsername())
+                    try {
+                        // Explicitly disable SCRAM authentication mechanism which requires SASL
+                        System.setProperty("org.mongodb.driver.disableSaslAuthentication", "true");
+                        
+                        Log.d(TAG, "Disabled SASL authentication, using legacy MONGODB-CR");
+                        
+                        // Set authentication database to admin by default in fallback mode
+                        String authDb = "admin";
+                        
+                        StringBuilder connString = new StringBuilder("mongodb://");
+                        
+                        // Add credentials if available
+                        if (connectionInfo.getUsername() != null && !connectionInfo.getUsername().isEmpty() &&
+                                connectionInfo.getPassword() != null && !connectionInfo.getPassword().isEmpty()) {
+                            
+                            // URL encode the password to handle special characters
+                            String encodedPassword;
+                            try {
+                                encodedPassword = java.net.URLEncoder.encode(
+                                    connectionInfo.getPassword(), "UTF-8")
+                                    .replace("+", "%20");  // Replace space encoding + with %20
+                                
+                                Log.d(TAG, "Password contains special characters, using URL encoding");
+                            } catch (Exception ex) {
+                                // If encoding fails, use the raw password (may still have issues)
+                                encodedPassword = connectionInfo.getPassword();
+                                Log.e(TAG, "Failed to URL encode password, using raw password");
+                            }
+                            
+                            connString.append(connectionInfo.getUsername())
+                                    .append(":")
+                                    .append(encodedPassword)
+                                    .append("@");
+                        }
+                        
+                        // Add host:port/database with additional options for legacy auth
+                        connString.append(connectionInfo.getHost())
                                 .append(":")
-                                .append(connectionInfo.getPassword())
-                                .append("@");
+                                .append(connectionInfo.getPort())
+                                .append("/")
+                                .append(authDb)  // Use admin database for auth
+                                .append("?authSource=")
+                                .append(authDb)
+                                .append("&connectTimeoutMS=20000&socketTimeoutMS=30000")
+                                .append("&authMechanism=MONGODB-CR");  // Use legacy auth mechanism
+                        
+                        Log.d(TAG, "Using connection string (credentials hidden): mongodb://[auth_if_provided]@" +
+                                connectionInfo.getHost() + ":" + connectionInfo.getPort() + "/" + 
+                                authDb + "?authSource=" + authDb + 
+                                "&connectTimeoutMS=20000&socketTimeoutMS=30000&authMechanism=MONGODB-CR");
+                        
+                        // Build options without SASL
+                        MongoClientOptions fallbackOptions = MongoClientOptions.builder()
+                                .connectTimeout(20000)
+                                .socketTimeout(30000)
+                                .serverSelectionTimeout(20000)
+                                .build();
+                        
+                        // Try simplified connection
+                        this.mongoClient = new MongoClient(serverAddress, fallbackOptions);
+                        
+                        // Get the requested database regardless of auth database
+                        this.mongoDatabase = mongoClient.getDB(connectionInfo.getDatabase());
+                        
+                    } catch (Exception fallbackEx) {
+                        Log.e(TAG, "Legacy auth approach failed, trying direct connection: " + fallbackEx.getMessage());
+                        
+                        // Last attempt - simple connection
+                        this.mongoClient = new MongoClient(serverAddress);
+                        this.mongoDatabase = mongoClient.getDB(connectionInfo.getDatabase());
                     }
-                    
-                    // Add host:port/database
-                    connString.append(connectionInfo.getHost())
-                            .append(":")
-                            .append(connectionInfo.getPort())
-                            .append("/")
-                            .append(connectionInfo.getDatabase())
-                            .append("?connectTimeoutMS=20000&socketTimeoutMS=30000");
-                    
-                    Log.d(TAG, "Using connection string (credentials hidden): mongodb://[auth_if_provided]@" +
-                            connectionInfo.getHost() + ":" + connectionInfo.getPort() + "/" + 
-                            connectionInfo.getDatabase() + "?connectTimeoutMS=20000&socketTimeoutMS=30000");
-                    
-                    // Build options
-                    MongoClientOptions fallbackOptions = MongoClientOptions.builder()
-                            .connectTimeout(20000)
-                            .socketTimeout(30000)
-                            .serverSelectionTimeout(20000)
-                            .build();
-                    
-                    // Try simplified connection
-                    this.mongoClient = new MongoClient(serverAddress, fallbackOptions);
-                    this.mongoDatabase = mongoClient.getDB(connectionInfo.getDatabase());
                     
                     // Test connection
                     DBObject pingCmd = new BasicDBObject("ping", 1);

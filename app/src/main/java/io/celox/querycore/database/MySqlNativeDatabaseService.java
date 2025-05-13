@@ -18,34 +18,30 @@ import java.util.Properties;
 
 import io.celox.querycore.models.ConnectionInfo;
 
-public class MySqlDatabaseService implements DatabaseService {
+/**
+ * MySQL database service using the official MySQL JDBC driver instead of MariaDB
+ */
+public class MySqlNativeDatabaseService implements DatabaseService {
     
-    private static final String TAG = "MySqlDatabaseService";
+    private static final String TAG = "MySqlNativeService";
     private String connectionTrackingId;
     
     static {
-        // Configure system-wide MariaDB/MySQL driver properties
-        System.setProperty("org.mariadb.jdbc.logging.level", "DEBUG");
-        System.setProperty("org.mariadb.jdbc.logging.enable", "true");
-        
-        // Disable DNS SRV lookup
-        System.setProperty("org.mariadb.jdbc.enabledSslProtocolSuites", "TLSv1,TLSv1.1,TLSv1.2");
+        // Configure system-wide MariaDB driver properties
+        System.setProperty("org.mariadb.jdbc.sslMode", "DISABLED"); // Simplify SSL for mobile
         
         // Sensible timeouts
         System.setProperty("org.mariadb.jdbc.connectTimeout", "20000");
         System.setProperty("org.mariadb.jdbc.socketTimeout", "30000");
         
-        // Reduce idle connection lifetime for mobile
-        System.setProperty("org.mariadb.jdbc.idleTimeout", "60000");
-        
-        Log.i("MySqlDatabaseService", "MySQL/MariaDB JDBC driver system properties configured");
+        Log.i("MySqlNativeService", "MariaDB JDBC driver system properties configured");
     }
     
     private Connection connection;
     private ConnectionInfo connectionInfo;
     
     /**
-     * Detects specific error types from MySQL/MariaDB exceptions and provides user-friendly error messages
+     * Detects specific error types from MySQL exceptions and provides user-friendly error messages
      * @param e The exception to analyze
      * @return A user-friendly error message, or null if no specific error type is detected
      */
@@ -59,7 +55,6 @@ public class MySqlDatabaseService implements DatabaseService {
         Log.d(TAG, "SQL error details - Error code: " + errorCode + ", SQLState: " + sqlState);
         
         // MySQL error codes: https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html
-        // MariaDB error codes: https://mariadb.com/kb/en/mariadb-error-codes/
         
         // Authentication errors
         if (errorCode == 1045 || "28000".equals(sqlState)) {
@@ -96,7 +91,7 @@ public class MySqlDatabaseService implements DatabaseService {
         // Wrong port (potentially MongoDB)
         if (connectionInfo.getPort() == 27017) {
             return "Connection error: You're trying to connect to port 27017, which is typically used for MongoDB, " +
-                   "not MySQL/MariaDB. MySQL/MariaDB typically uses port 3306. Please check your connection settings.";
+                   "not MySQL. MySQL typically uses port 3306. Please check your connection settings.";
         }
         
         return null;
@@ -105,10 +100,10 @@ public class MySqlDatabaseService implements DatabaseService {
     @Override
     public void connect(ConnectionInfo connectionInfo) throws Exception {
         // Start connection tracking
-        connectionTrackingId = ConnectionTracker.getInstance().trackConnectionStart(connectionInfo, "MySQL/MariaDB");
+        connectionTrackingId = ConnectionTracker.getInstance().trackConnectionStart(connectionInfo, "MySQL");
         
         // Log connection attempt with detailed information
-        Log.i(TAG, "-------------- MYSQL/MARIADB CONNECTION ATTEMPT --------------");
+        Log.i(TAG, "-------------- MYSQL CONNECTION ATTEMPT --------------");
         Log.i(TAG, "Connection ID: " + connectionTrackingId);
         Log.i(TAG, "Host: " + connectionInfo.getHost());
         Log.i(TAG, "Port: " + connectionInfo.getPort());
@@ -128,9 +123,9 @@ public class MySqlDatabaseService implements DatabaseService {
         // Validate port number - MySQL typically uses 3306
         int port = connectionInfo.getPort();
         if (port == 27017) {
-            Log.w(TAG, "Warning: Port 27017 is typically used for MongoDB, not MySQL/MariaDB");
-            String errorMsg = "Error: Port 27017 is typically used for MongoDB, not MySQL/MariaDB. " +
-                  "Please check your connection settings. MySQL/MariaDB typically uses port 3306.";
+            Log.w(TAG, "Warning: Port 27017 is typically used for MongoDB, not MySQL");
+            String errorMsg = "Error: Port 27017 is typically used for MongoDB, not MySQL. " +
+                  "Please check your connection settings. MySQL typically uses port 3306.";
             ConnectionTracker.getInstance().trackConnectionFailure(connectionTrackingId, errorMsg, "WRONG_PORT");
             throw new Exception(errorMsg);
         } else if (port != 3306 && port != 3307) {
@@ -141,11 +136,9 @@ public class MySqlDatabaseService implements DatabaseService {
         // Driver registration using error handling approach to prevent crashes
         boolean driverLoaded = false;
         
-        // Dynamic driver loading with proper error handling
+        // Load MariaDB driver for MySQL compatibility
         try {
             Log.d(TAG, "Attempting to load MariaDB JDBC driver");
-            // We need to use the MariaDB driver directly without using DriverAction interface
-            // which is not available on all Android versions
             Class<?> driverClass = Class.forName("org.mariadb.jdbc.Driver", true, 
                                                 getClass().getClassLoader());
             driverLoaded = true;
@@ -156,99 +149,55 @@ public class MySqlDatabaseService implements DatabaseService {
                 Object version = driverClass.getField("VERSION").get(null);
                 Log.i(TAG, "MariaDB JDBC driver version: " + version);
             } catch (Exception ex) {
-                Log.d(TAG, "Could not retrieve driver version: " + ex.getMessage());
+                Log.d(TAG, "Could not retrieve MariaDB driver version: " + ex.getMessage());
             }
             
         } catch (ClassNotFoundException | NoClassDefFoundError e) {
             // If we get here, the driver wasn't found or couldn't be initialized
             Log.e(TAG, "Failed to load MariaDB JDBC driver: " + e.getMessage(), e);
-            String errorMsg = "Cannot load MariaDB JDBC driver for MySQL connection. " +
+            String errorMsg = "Cannot load MariaDB JDBC driver for connection. " +
                 "Please check your connection settings or try updating the app.";
             ConnectionTracker.getInstance().trackConnectionFailure(connectionTrackingId, errorMsg, "DRIVER_LOAD_FAILED");
             throw new Exception(errorMsg, e);
         }
         
         if (!driverLoaded) {
-            Log.e(TAG, "Failed to initialize MySQL/MariaDB driver");
-            String errorMsg = "Failed to initialize MySQL/MariaDB driver";
+            Log.e(TAG, "Failed to initialize MariaDB driver");
+            String errorMsg = "Failed to initialize MariaDB driver";
             ConnectionTracker.getInstance().trackConnectionFailure(connectionTrackingId, errorMsg, "DRIVER_INIT_FAILED");
             throw new Exception(errorMsg);
         }
         
-        // Create connection URL with advanced options for better error handling
-        String baseUrl;
-        
-        // Build URL with enhanced parameters for diagnostics
-        baseUrl = String.format("jdbc:mariadb://%s:%d/%s?useSSL=false&connectTimeout=20000" +
-                "&socketTimeout=30000&allowPublicKeyRetrieval=true&useCompression=true" +
-                "&characterEncoding=utf8&enablePacketDebug=true",
-                connectionInfo.getHost(),
-                connectionInfo.getPort(),
-                connectionInfo.getDatabase());
-        
-        Log.d(TAG, "Connection URL (without credentials): " + baseUrl);
-        
-        // Create a properties object with enhanced options
-        Properties props = new Properties();
-        props.setProperty("user", connectionInfo.getUsername());
-        
-        // Make sure password is not null and properly set
-        if (connectionInfo.getPassword() != null && !connectionInfo.getPassword().isEmpty()) {
-            props.setProperty("password", connectionInfo.getPassword());
-            Log.d(TAG, "Password property set correctly (length: " + connectionInfo.getPassword().length() + ")");
+        // Build connection URL for MariaDB
+        String url;
+        if (connectionInfo.getUsername() != null && !connectionInfo.getUsername().isEmpty() && 
+            connectionInfo.getPassword() != null && !connectionInfo.getPassword().isEmpty()) {
+            
+            // Build MariaDB URL without embedding credentials (to avoid special character issues)
+            url = String.format("jdbc:mariadb://%s:%d/%s?useSSL=false&connectTimeout=20000" +
+                    "&socketTimeout=30000",
+                    connectionInfo.getHost(),
+                    connectionInfo.getPort(),
+                    connectionInfo.getDatabase());
+            
+            Log.d(TAG, "Using MariaDB URL without embedded credentials: " + url);
         } else {
-            Log.w(TAG, "Password is empty or null - this will likely cause authentication issues");
+            Log.w(TAG, "Username or password is empty - this will likely cause authentication issues");
+            throw new Exception("Error: Username and password cannot be empty");
         }
-        
-        props.setProperty("connectTimeout", "20000"); // 20 seconds
-        props.setProperty("socketTimeout", "30000"); // 30 seconds
-        props.setProperty("loginTimeout", "20000"); // 20 seconds
-        props.setProperty("tcpKeepAlive", "true");
-        props.setProperty("useUnicode", "true");
-        props.setProperty("characterEncoding", "UTF-8");
-        props.setProperty("allowMultiQueries", "false"); // Security measure
-        props.setProperty("usePipelineAuth", "false"); // More compatible
-        props.setProperty("passwordCharacterEncoding", "UTF-8"); // Ensure password encoding is correct
-        
-        Log.d(TAG, "Connection properties configured");
         
         // Connect with enhanced error handling
         try {
-            Log.d(TAG, "Attempting to establish MariaDB connection");
+            Log.d(TAG, "Attempting to establish MariaDB connection to MySQL server");
             
-            // Let's build the URL with credentials directly embedded in it, bypassing properties
-            String fullUrl;
-            if (connectionInfo.getUsername() != null && !connectionInfo.getUsername().isEmpty() && 
-                connectionInfo.getPassword() != null && !connectionInfo.getPassword().isEmpty()) {
-                
-                // URL encode the password
-                String encodedPassword;
-                try {
-                    encodedPassword = java.net.URLEncoder.encode(connectionInfo.getPassword(), "UTF-8");
-                    Log.d(TAG, "Password encoded for URL inclusion");
-                } catch (Exception e) {
-                    encodedPassword = connectionInfo.getPassword();
-                    Log.e(TAG, "Failed to URL encode password", e);
-                }
-                
-                fullUrl = String.format("jdbc:mariadb://%s:%s@%s:%d/%s?useSSL=false&connectTimeout=20000" +
-                        "&socketTimeout=30000&allowPublicKeyRetrieval=true&useCompression=true" +
-                        "&characterEncoding=utf8&enablePacketDebug=true",
-                        connectionInfo.getUsername(),
-                        encodedPassword,
-                        connectionInfo.getHost(),
-                        connectionInfo.getPort(),
-                        connectionInfo.getDatabase());
-                
-                Log.d(TAG, "Using URL with embedded credentials (password hidden): " + 
-                      fullUrl.replaceAll(encodedPassword, "********"));
-                
-                // Connect with URL only
-                this.connection = DriverManager.getConnection(fullUrl);
-            } else {
-                // Fall back to original method
-                this.connection = DriverManager.getConnection(baseUrl, props);
-            }
+            // Create connection properties with credentials
+            Properties props = new Properties();
+            props.setProperty("user", connectionInfo.getUsername());
+            props.setProperty("password", connectionInfo.getPassword());
+            
+            // Connect with properties object for authentication
+            this.connection = DriverManager.getConnection(url, props);
+            Log.i(TAG, "Successfully connected using MariaDB driver to MySQL server");
             
             // Test connection with a simple query
             try (Statement stmt = connection.createStatement()) {
@@ -260,7 +209,7 @@ public class MySqlDatabaseService implements DatabaseService {
             }
             
             // Log connection success details
-            Log.i(TAG, "Successfully connected to MySQL/MariaDB database");
+            Log.i(TAG, "Successfully connected to MySQL database");
             String dbDetails = "";
             if (connection.getMetaData() != null) {
                 dbDetails = connection.getMetaData().getDatabaseProductName() + " " +
@@ -293,12 +242,12 @@ public class MySqlDatabaseService implements DatabaseService {
             }
             
             // Generic error with more details
-            String errorMsg = "Failed to connect to MySQL/MariaDB database (" + e.getErrorCode() + "): " + e.getMessage();
+            String errorMsg = "Failed to connect to MySQL database (" + e.getErrorCode() + "): " + e.getMessage();
             ConnectionTracker.getInstance().trackConnectionFailure(connectionTrackingId, errorMsg, "SQL_ERROR");
             throw new Exception(errorMsg, e);
         } catch (Exception e) {
             Log.e(TAG, "Non-SQL exception during connection: " + e.getMessage(), e);
-            String errorMsg = "Unexpected error connecting to MySQL/MariaDB: " + e.getMessage();
+            String errorMsg = "Unexpected error connecting to MySQL: " + e.getMessage();
             ConnectionTracker.getInstance().trackConnectionFailure(connectionTrackingId, errorMsg, "UNEXPECTED_ERROR");
             throw new Exception(errorMsg, e);
         }
@@ -310,13 +259,13 @@ public class MySqlDatabaseService implements DatabaseService {
             // Track disconnection if we had a successful connection
             if (connectionTrackingId != null) {
                 ConnectionTracker.getInstance().trackDisconnection(connectionTrackingId);
-                Log.i(TAG, "Disconnecting MySQL/MariaDB connection: " + connectionTrackingId);
+                Log.i(TAG, "Disconnecting MySQL connection: " + connectionTrackingId);
             }
             
-            Log.d(TAG, "Disconnecting from MySQL/MariaDB database");
+            Log.d(TAG, "Disconnecting from MySQL database");
             connection.close();
             connection = null;
-            Log.i(TAG, "Successfully disconnected from MySQL/MariaDB database");
+            Log.i(TAG, "Successfully disconnected from MySQL database");
         } else {
             Log.d(TAG, "Disconnect called but no active connection exists");
         }
@@ -425,8 +374,12 @@ public class MySqlDatabaseService implements DatabaseService {
         Log.d(TAG, "Executing query: " + query.trim());
         long startTime = System.currentTimeMillis();
         
-        try (Statement statement = connection.createStatement();
-             ResultSet resultSet = statement.executeQuery(query)) {
+        try {
+            // Set default authentication if needed
+            connection.createStatement().execute("SET @@session.default_authentication_plugin='mysql_native_password'");
+            
+            Statement statement = connection.createStatement();
+            ResultSet resultSet = statement.executeQuery(query);
             ResultSetMetaData metaData = resultSet.getMetaData();
             int columnCount = metaData.getColumnCount();
             
@@ -459,6 +412,10 @@ public class MySqlDatabaseService implements DatabaseService {
             long duration = System.currentTimeMillis() - startTime;
             Log.i(TAG, "Query executed successfully. Retrieved " + rowCount + " rows in " + duration + "ms");
             
+            // Close resources
+            resultSet.close();
+            statement.close();
+            
         } catch (SQLException e) {
             long duration = System.currentTimeMillis() - startTime;
             Log.e(TAG, "Error executing query (" + duration + "ms): " + e.getMessage(), e);
@@ -483,10 +440,18 @@ public class MySqlDatabaseService implements DatabaseService {
         Log.d(TAG, "Executing update query: " + query.trim());
         long startTime = System.currentTimeMillis();
         
-        try (Statement statement = connection.createStatement()) {
+        try {
+            // Set default authentication if needed
+            connection.createStatement().execute("SET @@session.default_authentication_plugin='mysql_native_password'");
+            
+            Statement statement = connection.createStatement();
             int rowsAffected = statement.executeUpdate(query);
             long duration = System.currentTimeMillis() - startTime;
             Log.i(TAG, "Update executed successfully. Affected " + rowsAffected + " rows in " + duration + "ms");
+            
+            // Close resources
+            statement.close();
+            
             return rowsAffected;
             
         } catch (SQLException e) {
@@ -518,8 +483,12 @@ public class MySqlDatabaseService implements DatabaseService {
         long startTime = System.currentTimeMillis();
         
         String query = "DESCRIBE " + table;
-        try (PreparedStatement statement = connection.prepareStatement(query);
-             ResultSet resultSet = statement.executeQuery()) {
+        try {
+            // Set default authentication if needed
+            connection.createStatement().execute("SET @@session.default_authentication_plugin='mysql_native_password'");
+            
+            PreparedStatement statement = connection.prepareStatement(query);
+            ResultSet resultSet = statement.executeQuery();
             
             while (resultSet.next()) {
                 String fieldName = resultSet.getString("Field");
@@ -537,6 +506,10 @@ public class MySqlDatabaseService implements DatabaseService {
             long duration = System.currentTimeMillis() - startTime;
             Log.i(TAG, "Retrieved structure for table '" + table + "' with " + 
                   structure.size() + " columns in " + duration + "ms");
+                  
+            // Close resources
+            resultSet.close();
+            statement.close();
             
         } catch (SQLException e) {
             Log.e(TAG, "Error retrieving table structure: " + e.getMessage(), e);

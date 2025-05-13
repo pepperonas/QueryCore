@@ -113,12 +113,8 @@ dependencies {
     // Simple HTTP client for Android
     implementation 'org.apache.httpcomponents:httpclient-android:4.3.5.1'
     
-    // Use a more focused set of dependencies for SASL support
-    implementation 'org.apache.directory.server:apacheds-kerberos-codec:2.0.0-M24'
-    implementation 'org.apache.directory.server:apacheds-protocol-ldap:2.0.0-M24'
-
-    // MariaDB connector with Android compatibility
-    // Using 2.4.4 version that doesn't require java.sql.DriverAction
+    // Using MariaDB 2.4.4 which doesn't require java.sql.DriverAction
+    // This version is more compatible with Android
     implementation 'org.mariadb.jdbc:mariadb-java-client:2.4.4'
     
     // Add compatibility for earlier Android versions
