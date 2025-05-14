@@ -91,6 +91,8 @@ android {
                 'META-INF/services/javax.security.auth.spi.LoginModule',
                 'META-INF/services/javax.security.sasl.SaslClientFactory',
                 'META-INF/services/javax.security.sasl.SaslServerFactory',
+                'META-INF/services/javax.annotation.processing.Processor',
+                'META-INF/services/java.security.Provider',
                 'OSGI-INF/bundle.info',
                 'OSGI-INF/**'
             ]
@@ -113,9 +115,11 @@ dependencies {
     // Simple HTTP client for Android
     implementation 'org.apache.httpcomponents:httpclient-android:4.3.5.1'
     
-    // Using MariaDB 2.4.4 which doesn't require java.sql.DriverAction
-    // This version is more compatible with Android
-    implementation 'org.mariadb.jdbc:mariadb-java-client:2.4.4'
+    // Use older MySQL Connector/J version for better Android compatibility
+    implementation 'mysql:mysql-connector-java:5.1.49'
+    
+    // MySQL authentication helpers for more reliable auth handling
+    implementation 'org.ow2.asm:asm:9.3'
     
     // Add compatibility for earlier Android versions
     implementation 'org.apache.commons:commons-lang3:3.12.0'
